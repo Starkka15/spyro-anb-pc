@@ -1,0 +1,27 @@
+#include <windows.h>
+#include "version.h"
+
+1 ICON "../res/spyro.ico"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION SPYRO_PORT_VERSION_RC
+ PRODUCTVERSION SPYRO_PORT_VERSION_RC
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "FileDescription", "The Legend of Spyro: A New Beginning"
+            VALUE "ProductName", "The Legend of Spyro: A New Beginning (PC port)"
+            VALUE "FileVersion", SPYRO_PORT_VERSION
+            VALUE "ProductVersion", SPYRO_PORT_VERSION
+            VALUE "OriginalFilename", "spyro_anb_recomp.exe"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

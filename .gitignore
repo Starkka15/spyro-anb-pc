@@ -1,0 +1,12 @@
+# Only the hand-written port is public. Game files, the GoD package,
+# generated code, builds, logs and captures never leave this machine.
+/*
+!/.gitignore
+!/CMakeLists.txt
+!/README.md
+!/LICENSE
+!/src/
+!/installer/
+!/res/
+!/tools/
+/src/recomp/gen/

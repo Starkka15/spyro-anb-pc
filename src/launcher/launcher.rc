@@ -1,0 +1,74 @@
+#include <windows.h>
+#include <commctrl.h>
+#include "launcher_res.h"
+#include "../version.h"
+
+1 ICON "../../res/spyro.ico"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION SPYRO_PORT_VERSION_RC
+ PRODUCTVERSION SPYRO_PORT_VERSION_RC
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "FileDescription", "The Legend of Spyro: A New Beginning - Launcher"
+            VALUE "ProductName", "The Legend of Spyro: A New Beginning (PC port)"
+            VALUE "FileVersion", SPYRO_PORT_VERSION
+            VALUE "ProductVersion", SPYRO_PORT_VERSION
+            VALUE "OriginalFilename", "spyro_launcher.exe"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+
+IDD_LAUNCHER DIALOGEX 0, 0, 262, 270
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX
+CAPTION "The Legend of Spyro: A New Beginning"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    GROUPBOX        "Display", -1, 7, 7, 248, 106
+    LTEXT           "Mode:", -1, 17, 23, 66, 8
+    COMBOBOX        IDC_MODE, 88, 21, 158, 60, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Window size:", IDC_SIZE_LBL, 17, 41, 66, 8
+    COMBOBOX        IDC_WINSIZE, 88, 39, 158, 140, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Sharpness:", -1, 17, 59, 66, 8
+    COMBOBOX        IDC_SCALE, 88, 57, 158, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    AUTOCHECKBOX    "Widescreen (16:9)", IDC_WIDE, 17, 78, 228, 10
+    AUTOCHECKBOX    "VSync (no tearing, slightly more input lag)", IDC_VSYNC, 17, 94, 228, 10
+
+    GROUPBOX        "Controls", -1, 7, 119, 248, 72
+    AUTOCHECKBOX    "Keyboard and mouse play as player 1", IDC_MKB, 17, 135, 150, 10
+    PUSHBUTTON      "Key bindings...", IDC_KEYS, 181, 133, 65, 14
+    LTEXT           "Mouse sensitivity:", IDC_SENS_LBL, 17, 154, 66, 8
+    CONTROL         "", IDC_SENS, "msctls_trackbar32", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, 84, 151, 132, 15
+    LTEXT           "", IDC_SENS_VAL, 220, 154, 26, 8
+    AUTOCHECKBOX    "Invert camera up and down", IDC_INVERT, 17, 172, 228, 10
+
+    GROUPBOX        "Game", -1, 7, 197, 248, 46
+    AUTOCHECKBOX    "Skip the company logo movies at startup", IDC_SKIP, 17, 210, 228, 10
+    LTEXT           "", IDC_GAME_STATUS, 17, 227, 150, 8
+    PUSHBUTTON      "Install game files...", IDC_GAMEFILES, 171, 224, 75, 14
+
+    PUSHBUTTON      "Saves folder", IDC_SAVES, 7, 250, 56, 14
+    PUSHBUTTON      "Defaults", IDC_DEFAULTS, 67, 250, 46, 14
+    DEFPUSHBUTTON   "Play", IDOK, 125, 250, 42, 14
+    PUSHBUTTON      "Save", IDC_SAVE, 170, 250, 42, 14
+    PUSHBUTTON      "Exit", IDCANCEL, 215, 250, 40, 14
+END
+
+IDD_IMPORT DIALOGEX 0, 0, 260, 66
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION
+CAPTION "Installing the game files"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    LTEXT           "", IDC_IMPORT_TEXT, 10, 10, 240, 10, SS_PATHELLIPSIS
+    CONTROL         "", IDC_IMPORT_BAR, "msctls_progress32", WS_BORDER, 10, 24, 240, 12
+    PUSHBUTTON      "Cancel", IDCANCEL, 200, 44, 50, 14
+END
