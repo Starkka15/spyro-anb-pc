@@ -28,9 +28,10 @@
 extern void xbox_FileWritesSettle(DWORD quiet_ms, DWORD max_ms);
 extern int mkb_enabled(void);
 extern int mkb_last_device_keyboard(void);
+extern int mkb_captured(void);
 
 #define VB_BYTES   (64u * 1024 * 1024)
-#define MAX_TARGETS 32
+#define MAX_TARGETS 64
 #define TEX_BUCKETS 4096
 #define MAX_STATES  512
 
@@ -70,6 +71,7 @@ typedef struct {
 
 typedef struct {
     uint32_t va, lw, lh;
+    uint32_t frame;                     /* last use, for eviction */
     ID3D11Texture2D *tex;
     ID3D11DepthStencilView *dsv;
 } Depth;
@@ -115,8 +117,11 @@ static const char VS_SRC[] =
     "struct O { float4 p : SV_Position; float4 d : COLOR0; float4 s : COLOR1; float f : FOGC;\n"
     "           float4 t0 : TEXCOORD0; float4 t1 : TEXCOORD1; float4 t2 : TEXCOORD2; float4 t3 : TEXCOORD3; };\n"
     "O main(I i) {\n"
+    /* NV2A puts pixel centres on integers (D3D8/9 rules), D3D11 on .5: without the half-pixel shift the
+     * frame and every blur layer land half a surface pixel right and down, which left a bright line
+     * along the top and left edges (a few pixels wide for the 160x120 bloom layers). */
     "  O o; float w = i.p.w != 0 ? 1 / i.p.w : 1;\n"
-    "  o.p = float4((i.p.x * vp.x - 1) * w, (1 - i.p.y * vp.y) * w, i.p.z * vp.z * w, w);\n"
+    "  o.p = float4(((i.p.x - 0.5) * vp.x - 1) * w, (1 - (i.p.y - 0.5) * vp.y) * w, i.p.z * vp.z * w, w);\n"
     "  o.d = i.d; o.s = i.s; o.f = i.f; o.t0 = i.t0; o.t1 = i.t1; o.t2 = i.t2; o.t3 = i.t3;\n"
     "  return o;\n"
     "}\n";
@@ -449,6 +454,13 @@ static LRESULT CALLBACK wnd_proc(HWND h, UINT m, WPARAM w, LPARAM l)
         break;
     case WM_SYSCHAR:
         return 0;
+    case WM_SETCURSOR:
+        /* The mouse turns the camera: no pointer over the picture while it is captured (F9 releases). */
+        if (LOWORD(l) == HTCLIENT && mkb_captured()) {
+            SetCursor(NULL);
+            return TRUE;
+        }
+        break;
     }
     return DefWindowProcA(h, m, w, l);
 }
@@ -732,6 +744,50 @@ static void release_copy(Target *t)
     }
 }
 
+/* Each level load puts the game's surfaces at new addresses, so the tables fill up over a session.
+ * A full table used to restart at slot 0 without releasing anything: lookups then saw only the
+ * slots after the restart, and a reused slot that was still bound skipped bind_targets' viewport
+ * update, so the 640x480 frame drew into a small top-left corner of stale white (seen on the Ally
+ * after a long session). Now the least recently used entry that is not in use is released. */
+static int free_rt_slot(void)
+{
+    int i, best = -1;
+    Target *t;
+
+    if (s_nrt < MAX_TARGETS)
+        return s_nrt++;
+    for (i = 0; i < MAX_TARGETS; i++)
+        if (&s_rts[i] != s_cur_rt && &s_rts[i] != s_present && (best < 0 || s_frame - s_rts[i].frame > s_frame - s_rts[best].frame))
+            best = i;
+    t = &s_rts[best];
+    fprintf(stderr, "[gpu] evict target %08X %ux%u, unused for %u frames\n", t->va, t->lw, t->lh, s_frame - t->frame);
+    unbind_srvs();
+    release_copy(t);
+    ID3D11ShaderResourceView_Release(t->srv);
+    ID3D11RenderTargetView_Release(t->rtv);
+    ID3D11Texture2D_Release(t->tex);
+    memset(t, 0, sizeof *t);
+    return best;
+}
+
+static int free_ds_slot(void)
+{
+    int i, best = -1;
+    Depth *z;
+
+    if (s_nds < MAX_TARGETS)
+        return s_nds++;
+    for (i = 0; i < MAX_TARGETS; i++)
+        if (&s_dss[i] != s_cur_ds && (best < 0 || s_frame - s_dss[i].frame > s_frame - s_dss[best].frame))
+            best = i;
+    z = &s_dss[best];
+    fprintf(stderr, "[gpu] evict depth %08X %ux%u, unused for %u frames\n", z->va, z->lw, z->lh, s_frame - z->frame);
+    ID3D11DepthStencilView_Release(z->dsv);
+    ID3D11Texture2D_Release(z->tex);
+    memset(z, 0, sizeof *z);
+    return best;
+}
+
 /* A title narrows the clip rectangle freely, so a target only ever grows and keeps its pixels. */
 static Target *get_rt(const Nv2aSurface *s)
 {
@@ -752,15 +808,12 @@ static Target *get_rt(const Nv2aSurface *s)
         return t;
     }
     if (!t) {
-        if (s_nrt == MAX_TARGETS) {
-            fprintf(stderr, "[gpu] out of render targets\n");
-            s_nrt = 0;
-        }
-        t = &s_rts[s_nrt++];
+        t = &s_rts[free_rt_slot()];
         memset(t, 0, sizeof *t);
     }
     old = *t;
     t->va = s->color_va;
+    t->frame = s_frame;
     t->pitch = s->pitch;
     t->bpp = s->bytes_per_pixel;
     t->lw = s->width > old.lw ? s->width : old.lw;
@@ -804,12 +857,12 @@ static Depth *get_ds(uint32_t va, uint32_t lw, uint32_t lh)
             z = &s_dss[i];
             break;
         }
-    if (z && lw <= z->lw && lh <= z->lh)
+    if (z && lw <= z->lw && lh <= z->lh) {
+        z->frame = s_frame;
         return z;
+    }
     if (!z) {
-        if (s_nds == MAX_TARGETS)
-            s_nds = 0;
-        z = &s_dss[s_nds++];
+        z = &s_dss[free_ds_slot()];
         memset(z, 0, sizeof *z);
     } else {
         if (s_cur_ds == z) {
@@ -821,6 +874,7 @@ static Depth *get_ds(uint32_t va, uint32_t lw, uint32_t lh)
         ID3D11Texture2D_Release(z->tex);
     }
     z->va = va;
+    z->frame = s_frame;
     z->lw = lw > z->lw ? lw : z->lw;
     z->lh = lh > z->lh ? lh : z->lh;
     memset(&d, 0, sizeof d);

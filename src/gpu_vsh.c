@@ -107,7 +107,9 @@ char *gpu_vsh_hlsl(const uint32_t (*prog)[4], uint32_t count, uint32_t inputs)
          "  else if (fg.z == 2) f = fg.x + exp2(-d * d * fg.y * fg.y * 32) - 1.5;\n"
          "  else f = fg.x + d * fg.y - 1;\n"
          "  if (aa.w > 0.5) f = abs(f);\n"
-         "  if (isnan(f)) f = 1;\n"
+         /* Bit test, not isnan(): Wine's/Proton's HLSL compiler (vkd3d-shader)
+          * has no isnan and fails the whole program (E5005). */
+         "  if ((asuint(f) & 0x7fffffff) > 0x7f800000) f = 1;\n"
          "  return saturate(f);\n"
          "}\n");
     emit("struct I {\n");
@@ -167,7 +169,8 @@ char *gpu_vsh_hlsl(const uint32_t (*prog)[4], uint32_t count, uint32_t inputs)
 
     emit("O o;\n"
          "float w = r12.w == 0 ? 1 : r12.w, z = r12.z * vp.z;\n"
-         "o.p = float4((r12.x * aa.x * vp.x - 1) * w, (1 - r12.y * aa.y * vp.y) * w, z * w, w);\n"
+         /* half-pixel shift: NV2A pixel centres are integers, D3D11's are .5 (see VS_SRC in gpu_backend.c) */
+         "o.p = float4(((r12.x * aa.x - 0.5) * vp.x - 1) * w, (1 - (r12.y * aa.y - 0.5) * vp.y) * w, z * w, w);\n"
          "o.cd = (r12.z - vp.w) * w;\n"
          "o.d = saturate(od0); o.s = saturate(od1); o.f = fogf(ofog.x);\n"
          "o.t0 = ot0; o.t1 = ot1; o.t2 = ot2; o.t3 = ot3;\n"

@@ -510,6 +510,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     /* D3D's Reset frees the frame buffers and allocates them again at each load. Without
      * reclaim the second Reset runs out of contiguous memory and leaves no back buffer. */
     _putenv_s("RECOMP_HEAP_RECLAIM", "1");
+    /* Wine/Proton (Steam Deck, ROG Ally on SteamOS): the fixed base list leaves the RAM mirrors and the
+     * tiled aperture at 0xF0000000 on host ranges Wine already uses (error 487), and the first write
+     * through the aperture crashes. Reserving the whole guest window as a placeholder avoids that.
+     * Windows keeps the old path; an explicit RECOMP_WIN_PLACEHOLDER in the environment wins. */
+    {
+        HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+        if (ntdll && GetProcAddress(ntdll, "wine_get_version") && !getenv("RECOMP_WIN_PLACEHOLDER")) {
+            _putenv_s("RECOMP_WIN_PLACEHOLDER", "1");
+            printf("Wine detected: reserving the guest window (RECOMP_WIN_PLACEHOLDER=1)\n");
+        }
+    }
     printf("Loading XBE...\n");
 
     /* Install VEH handler (first handler in chain) */
