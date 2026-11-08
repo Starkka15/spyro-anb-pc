@@ -5,6 +5,10 @@ recompilation with [xboxrecomp](https://github.com/sp00nznet/xboxrecomp): the
 Xbox program is translated to C ahead of time and runs directly, not in an
 emulator.
 
+> **About this port.** This port isn't mine to gatekeep. It's a basic starting
+> point to build on (features, fixes, polish), not a finished or maintained product. If
+> you feel up to it, feel free to continue the work; forks and pull requests are welcome.
+
 **This repository contains none of the game.** You need your own copy of The
 Legend of Spyro: A New Beginning for the original Xbox (title VU-074,
 version 1). Setup copies the game's files from a folder, a disc drive, or an
