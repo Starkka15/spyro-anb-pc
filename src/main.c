@@ -335,6 +335,7 @@ static DWORD WINAPI savedev_watch(LPVOID arg)
 
 static char s_exe_dir[MAX_PATH];
 static char s_game_dir[MAX_PATH];
+static int s_language;      /* LANGUAGE_*, Auto already resolved */
 
 static void exe_dir_init(void)
 {
@@ -493,6 +494,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         _putenv_s("RECOMP_HIDE_FILES", "Video\\sierra2_60.xmv;Video\\krome_60.xmv;Video\\tislogo_60.xmv");
     if (!getenv("RECOMP_VIDEO_FLAGS"))
         _putenv_s("RECOMP_VIDEO_FLAGS", g_settings.widescreen ? "1" : "0");
+    /* Applied to the game's language table after the memory init. */
+    s_language = settings_language_resolve(g_settings.language);
+    printf("Language: %s\n", settings_language_name(s_language));
     /* Audio init waits on the APU, and nothing is shown without the pushbuffer executor and its window. */
     _putenv_s("RECOMP_AC97_READY", "1");
     _putenv_s("RECOMP_PB_EXEC", "1");
@@ -566,6 +570,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
     g_xbox_mem_offset = xbox_GetMemoryOffset();
     printf("Xbox memory mapped. Offset: 0x%llX\n", (unsigned long long)g_xbox_mem_offset);
+    /* Language. The table at 0x39F590 has 20-byte entries: native name, name, code ("IT", which picks the
+     * cutscene subtitles, CSA_01IT.sub), text file (Translations.Italian.txt), and the file's size, which the
+     * game fills in. On a 60 Hz console (anything but PAL, sub_0027E7B0 sets 0x39F350 = 1) the game never
+     * asks the console's language and always takes entry 0, English; only the PAL path calls XGetLanguage.
+     * So the chosen language's first four fields are copied over entry 0 before the game reads it. The US
+     * disc carries English, French, Spanish, German, Italian and Dutch, entries 0 and 2-6. */
+    {
+        static const int entry[LANGUAGE_COUNT] = { 0, 0, 2, 3, 4, 5, 6 };
+        int e = entry[s_language];
+        if (e) {
+            uint32_t *table = (uint32_t *)((uint8_t *)g_xbox_mem_offset + 0x39F590u);
+            memcpy(table, table + e * 5, 4 * sizeof(uint32_t));
+        }
+    }
     if (getenv("RECOMP_SAVEDEV_WATCH"))
         CreateThread(NULL, 0, savedev_watch, NULL, 0, NULL);
     if (getenv("RECOMP_SAMPLE")) {

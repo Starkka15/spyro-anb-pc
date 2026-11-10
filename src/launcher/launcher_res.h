@@ -20,6 +20,7 @@
 #define IDC_SENS_VAL 1014
 #define IDC_INVERT   1015
 #define IDC_SKIP     1016
+#define IDC_LANG     1017
 #define IDC_IMPORT_TEXT 1020
 #define IDC_IMPORT_BAR  1021
 #define IDC_GAMEFILES   1022

@@ -28,7 +28,7 @@ BEGIN
     END
 END
 
-IDD_LAUNCHER DIALOGEX 0, 0, 262, 270
+IDD_LAUNCHER DIALOGEX 0, 0, 262, 288
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX
 CAPTION "The Legend of Spyro: A New Beginning"
 FONT 9, "Segoe UI", 400, 0, 0x1
@@ -51,16 +51,18 @@ BEGIN
     LTEXT           "", IDC_SENS_VAL, 220, 154, 26, 8
     AUTOCHECKBOX    "Invert camera up and down", IDC_INVERT, 17, 172, 228, 10
 
-    GROUPBOX        "Game", -1, 7, 197, 248, 46
-    AUTOCHECKBOX    "Skip the company logo movies at startup", IDC_SKIP, 17, 210, 228, 10
-    LTEXT           "", IDC_GAME_STATUS, 17, 227, 150, 8
-    PUSHBUTTON      "Install game files...", IDC_GAMEFILES, 171, 224, 75, 14
+    GROUPBOX        "Game", -1, 7, 197, 248, 64
+    LTEXT           "Language:", -1, 17, 213, 66, 8
+    COMBOBOX        IDC_LANG, 88, 211, 158, 120, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    AUTOCHECKBOX    "Skip the company logo movies at startup", IDC_SKIP, 17, 228, 228, 10
+    LTEXT           "", IDC_GAME_STATUS, 17, 245, 150, 8
+    PUSHBUTTON      "Install game files...", IDC_GAMEFILES, 171, 242, 75, 14
 
-    PUSHBUTTON      "Saves folder", IDC_SAVES, 7, 250, 56, 14
-    PUSHBUTTON      "Defaults", IDC_DEFAULTS, 67, 250, 46, 14
-    DEFPUSHBUTTON   "Play", IDOK, 125, 250, 42, 14
-    PUSHBUTTON      "Save", IDC_SAVE, 170, 250, 42, 14
-    PUSHBUTTON      "Exit", IDCANCEL, 215, 250, 40, 14
+    PUSHBUTTON      "Saves folder", IDC_SAVES, 7, 268, 56, 14
+    PUSHBUTTON      "Defaults", IDC_DEFAULTS, 67, 268, 46, 14
+    DEFPUSHBUTTON   "Play", IDOK, 125, 268, 42, 14
+    PUSHBUTTON      "Save", IDC_SAVE, 170, 268, 42, 14
+    PUSHBUTTON      "Exit", IDCANCEL, 215, 268, 40, 14
 END
 
 IDD_IMPORT DIALOGEX 0, 0, 260, 66

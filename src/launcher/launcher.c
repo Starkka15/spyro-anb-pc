@@ -167,6 +167,7 @@ static void show(HWND dlg, const SpyroSettings *s, const MouseSettings *m)
     show_sens(dlg);
     CheckDlgButton(dlg, IDC_INVERT, m->invert ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(dlg, IDC_SKIP, s->skip_intros ? BST_CHECKED : BST_UNCHECKED);
+    select_data(dlg, IDC_LANG, s->language);
     select_data(dlg, IDC_MODE, s->fullscreen);
     fill_sizes(dlg, s->window_width, s->window_height);
     CheckDlgButton(dlg, IDC_WIDE, s->widescreen ? BST_CHECKED : BST_UNCHECKED);
@@ -193,6 +194,7 @@ static void save(HWND dlg)
     s.vsync = IsDlgButtonChecked(dlg, IDC_VSYNC) == BST_CHECKED;
     s.keyboard_mouse = IsDlgButtonChecked(dlg, IDC_MKB) == BST_CHECKED;
     s.skip_intros = IsDlgButtonChecked(dlg, IDC_SKIP) == BST_CHECKED;
+    s.language = (int)selected_data(dlg, IDC_LANG);
 
     settings_set_int("Fullscreen", s.fullscreen);
     settings_set_int("WindowWidth", s.window_width);
@@ -202,6 +204,7 @@ static void save(HWND dlg)
     settings_set_int("VSync", s.vsync);
     settings_set_int("KeyboardMouse", s.keyboard_mouse);
     settings_set_int("SkipIntros", s.skip_intros);
+    settings_set_str("Language", settings_language_name(s.language));
     g_settings = s;
     {
         char v[16];
@@ -364,6 +367,19 @@ static INT_PTR CALLBACK dlg_proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
                      (LPARAM)LoadImageW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(1), IMAGE_ICON, 16, 16, 0));
         add_item(dlg, IDC_MODE, L"Windowed", 0);
         add_item(dlg, IDC_MODE, L"Fullscreen (borderless)", 1);
+        {
+            /* Each language in its own name, so a player can find theirs. */
+            static const wchar_t *const names[LANGUAGE_COUNT] = {
+                NULL, L"English", L"Français (French)", L"Español (Spanish)",
+                L"Deutsch (German)", L"Italiano (Italian)", L"Nederlands (Dutch)",
+            };
+            wchar_t t[64];
+            int i;
+            swprintf(t, 64, L"Auto (%ls)", names[settings_language_resolve(LANGUAGE_AUTO)]);
+            add_item(dlg, IDC_LANG, t, LANGUAGE_AUTO);
+            for (i = LANGUAGE_ENGLISH; i < LANGUAGE_COUNT; i++)
+                add_item(dlg, IDC_LANG, names[i], i);
+        }
         {
             MouseSettings m;
             double sens = settings_get_mkb("sens", 1.0);

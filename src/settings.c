@@ -22,7 +22,31 @@ SpyroSettings g_settings = {
     .widescreen     = 1,
     .keyboard_mouse = 1,
     .skip_intros    = 1,
+    .language       = LANGUAGE_AUTO,
 };
+
+static const char *const LANGUAGE_NAMES[LANGUAGE_COUNT] = {
+    "Auto", "English", "French", "Spanish", "German", "Italian", "Dutch",
+};
+
+const char *settings_language_name(int language)
+{
+    return language >= 0 && language < LANGUAGE_COUNT ? LANGUAGE_NAMES[language] : LANGUAGE_NAMES[0];
+}
+
+int settings_language_resolve(int language)
+{
+    if (language > LANGUAGE_AUTO && language < LANGUAGE_COUNT)
+        return language;
+    switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
+    case LANG_FRENCH:  return LANGUAGE_FRENCH;
+    case LANG_SPANISH: return LANGUAGE_SPANISH;
+    case LANG_GERMAN:  return LANGUAGE_GERMAN;
+    case LANG_ITALIAN: return LANGUAGE_ITALIAN;
+    case LANG_DUTCH:   return LANGUAGE_DUTCH;
+    default:           return LANGUAGE_ENGLISH;
+    }
+}
 
 static const char DEFAULT_FILE[] =
     "; The Legend of Spyro: A New Beginning -- settings\r\n"
@@ -51,6 +75,9 @@ static const char DEFAULT_FILE[] =
     "[Game]\r\n"
     "; 1 = start at the title screen, without the company logo movies.\r\n"
     "SkipIntros = 1\r\n"
+    "; Text language: Auto, English, French, Spanish, German, Italian or Dutch.\r\n"
+    "; Auto follows the Windows display language, and English when the game lacks it.\r\n"
+    "Language = Auto\r\n"
     "\r\n"
     "[Troubleshooting]\r\n"
     "; 1 = write spyro.log beside the game, for bug reports. It costs a little speed.\r\n"
@@ -191,6 +218,12 @@ static void apply(const char *k, const char *v)
         g_settings.skip_intros = n != 0;
     else if (!_stricmp(k, "Log"))
         g_settings.log = n != 0;
+    else if (!_stricmp(k, "Language")) {
+        int i;
+        for (i = 0; i < LANGUAGE_COUNT; i++)
+            if (!_stricmp(v, LANGUAGE_NAMES[i]))
+                g_settings.language = i;
+    }
 }
 
 void settings_load(void)
@@ -303,6 +336,12 @@ void settings_set_int(const char *key, int value)
         return;
     snprintf(v, sizeof v, "%d", value);
     set_line(s_path, DEFAULT_FILE, key, v);
+}
+
+void settings_set_str(const char *key, const char *value)
+{
+    if (ini_path())
+        set_line(s_path, DEFAULT_FILE, key, value);
 }
 
 void settings_set_mkb(const char *key, const char *value)
