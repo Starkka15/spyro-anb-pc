@@ -1,5 +1,5 @@
 # Screenshot of the running game window: tools\snap.ps1 <name>
-param([string]$Name = 'snap')
+param([string]$Name = 'snap', [string]$Proc = 'spyro_anb_recomp')
 Add-Type -AssemblyName System.Drawing
 Add-Type @'
 using System;
@@ -10,7 +10,7 @@ public static class Win {
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
 }
 '@
-$p = Get-Process spyro_anb_recomp -ErrorAction Stop
+$p = Get-Process $Proc -ErrorAction Stop
 [void][Win]::SetForegroundWindow($p.MainWindowHandle)
 Start-Sleep -Milliseconds 150
 $r = New-Object Rect

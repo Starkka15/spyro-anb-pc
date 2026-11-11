@@ -8,7 +8,7 @@
 ;
 ;   G:\InnoSetup\ISCC.exe installer\spyro.iss      -> release\
 
-#define AppVersion "1.0.2"
+#define AppVersion "1.0.3"
 #define AppTitle "The Legend of Spyro - A New Beginning"
 
 [Setup]

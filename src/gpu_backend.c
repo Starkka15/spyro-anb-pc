@@ -61,6 +61,7 @@ static ID3D11ShaderResourceView *s_white, *s_white_cube;
 /* ---- targets --------------------------------------------------------- */
 typedef struct {
     uint32_t va, pitch, bpp;
+    uint32_t fmt;                       /* SET_SURFACE_FORMAT colour code, last drawn with */
     uint32_t lw, lh;                    /* surface pixels; the texture is scaled */
     uint32_t frame;
     uint32_t dbg_draws, dbg_tris;
@@ -149,6 +150,7 @@ typedef struct {
 typedef struct {
     Nv2aCombiner rc;        /* colours zeroed: those are constants */
     uint32_t clip_mode, alpha_func, cube_mask, flags;   /* flags 1 combiners, 2 textured */
+    uint32_t kill_mask;     /* stages whose alpha-0 texels drop the pixel (TEXTURE_CONTROL0) */
 } PsKey;
 
 typedef struct PsEntry {
@@ -246,6 +248,9 @@ static void emit_stage_fetch(const PsKey *k, int st)
         emit("float4 s%d = 0;\n", st);
         break;
     }
+    /* ALPHA_KILL, as xemu does it: an exactly transparent texel drops the pixel. */
+    if (mode >= 1 && mode <= 3 && ((k->kill_mask >> st) & 1))
+        emit("if (s%d.a == 0) discard;\n", st);
 }
 
 /* nv2a_rc_eval, one combiner program at a time. */
@@ -368,8 +373,12 @@ static ID3D11PixelShader *get_ps(const PsKey *k)
     emit("float4 main(O i) : SV_Target {\nfloat4 o;\n");
     if (k->flags & 1)
         emit_combiners(k);
-    else if (k->flags & 2)
-        emit("o = i.d * T0.Sample(S0, i.t0.xy * st[0].xy + st[0].zw);\n");
+    else if (k->flags & 2) {
+        emit("float4 s0 = T0.Sample(S0, i.t0.xy * st[0].xy + st[0].zw);\n");
+        if (k->kill_mask & 1)
+            emit("if (s0.a == 0) discard;\n");
+        emit("o = i.d * s0;\n");
+    }
     else
         emit("o = i.d;\n");
     emit("o = saturate(o);\n");
@@ -805,6 +814,7 @@ static Target *get_rt(const Nv2aSurface *s)
     if (t && (s->width * s->bytes_per_pixel > s->pitch || (s->width <= t->lw && s->height <= t->lh))) {
         t->pitch = s->pitch;
         t->bpp = s->bytes_per_pixel;
+        t->fmt = s->color_format;
         return t;
     }
     if (!t) {
@@ -816,6 +826,7 @@ static Target *get_rt(const Nv2aSurface *s)
     t->frame = s_frame;
     t->pitch = s->pitch;
     t->bpp = s->bytes_per_pixel;
+    t->fmt = s->color_format;
     t->lw = s->width > old.lw ? s->width : old.lw;
     t->lh = s->height > old.lh ? s->height : old.lh;
     make_color(t->lw * s_scale, t->lh * s_scale, &t->tex, &t->rtv, &t->srv);
@@ -1432,6 +1443,10 @@ static VsEntry *s_vs_table[VS_BUCKETS];
 static VsEntry *s_last_vs;
 static ID3D11Buffer *s_ib, *s_prog_cb;
 static ID3D11RasterizerState *s_raster_prog;
+/* Culled variants of s_raster_prog, [cull back(0)/front(1)][front face CCW]. The title's culling
+ * decides more than speed: Spyro ANB counts its shadow volumes in alpha with a back-face pass that
+ * adds and a front-face pass that subtracts, and drawn unculled the two cancel everywhere. */
+static ID3D11RasterizerState *s_raster_cull[2][2], *s_raster_cur;
 static uint32_t s_ib_pos;
 static VsConsts s_prog_c;
 static int s_have_prog_c;
@@ -1463,6 +1478,13 @@ static int gpu_prepare_program(uint64_t hash, const uint32_t (*ins)[4], uint32_t
     src = gpu_vsh_hlsl(ins, count, inputs);
     if (!src)
         return 0;
+    if (getenv("RECOMP_VS_DUMP")) { /* DBG: logs\vs\<hash>.hlsl */
+        char path[MAX_PATH];
+        FILE *vf;
+        CreateDirectoryA("H:/spyro-xbox/logs/vs", NULL);
+        snprintf(path, sizeof path, "H:/spyro-xbox/logs/vs/%016llX.hlsl", (unsigned long long)hash);
+        if ((vf = fopen(path, "w")) != NULL) { fputs(src, vf); fclose(vf); }
+    }
     QueryPerformanceCounter(&t0);
     b = compile(src, strlen(src), "vs_5_0");
     QueryPerformanceCounter(&t1);
@@ -1553,8 +1575,30 @@ static void bind_prog_common(void)
     ID3D11DeviceContext_VSSetConstantBuffers(s_ctx, 0, 1, &s_prog_cb);
     ID3D11DeviceContext_PSSetConstantBuffers(s_ctx, 1, 1, &s_ps_cb);
     ID3D11DeviceContext_RSSetState(s_ctx, s_raster_prog);
+    s_raster_cur = s_raster_prog;
     s_last_vs = NULL;
     s_bound = 2;
+}
+
+/* SET_CULL_FACE_ENABLE / CULL_FACE / FRONT_FACE (GL enums) on a vertex-program draw. */
+static void prog_cull(const Nv2aRenderState *r)
+{
+    ID3D11RasterizerState *want = s_raster_prog;
+    if (r->cull_enable && (r->cull_face == 0x404 || r->cull_face == 0x405)) {
+        int front = r->cull_face == 0x404, ccw = r->front_face == 0x901;
+        if (!s_raster_cull[front][ccw]) {
+            D3D11_RASTERIZER_DESC rd;
+            ID3D11RasterizerState_GetDesc(s_raster_prog, &rd);
+            rd.CullMode = front ? D3D11_CULL_FRONT : D3D11_CULL_BACK;
+            rd.FrontCounterClockwise = ccw ? TRUE : FALSE;
+            CHECK(ID3D11Device_CreateRasterizerState(s_dev, &rd, &s_raster_cull[front][ccw]));
+        }
+        want = s_raster_cull[front][ccw];
+    }
+    if (want != s_raster_cur) {
+        ID3D11DeviceContext_RSSetState(s_ctx, want);
+        s_raster_cur = want;
+    }
 }
 
 static void prog_draw(const Target *rt, const Nv2aProgramDraw *p)
@@ -1662,10 +1706,18 @@ static void dump_begin(void)
     }
     if (GetFileAttributesA("H:/spyro-xbox/logs/dump.now") == INVALID_FILE_ATTRIBUTES)
         return;
+    s_dump_pre[0] = 0;
+    {   /* the file's first word, if any, prefixes this dump's names */
+        FILE *pf = fopen("H:/spyro-xbox/logs/dump.now", "r");
+        if (pf) {
+            if (fscanf(pf, "%30s", s_dump_pre) != 1) s_dump_pre[0] = 0;
+            fclose(pf);
+        }
+    }
     DeleteFileA("H:/spyro-xbox/logs/dump.now");
     s_dump_full = 1;
-    s_dump_pre[0] = 0;
-    s_dump_log = fopen("H:/spyro-xbox/logs/dump/frame.txt", "w");
+    sprintf(a, "H:/spyro-xbox/logs/dump/%sframe.txt", s_dump_pre);
+    s_dump_log = fopen(a, "w");
     s_dump = s_dump_log != NULL;
 }
 
@@ -1836,7 +1888,7 @@ static void dump_end(void)
     }
     for (i = 0; i < s_nrt; i++)
         if (s_rts[i].frame == s_frame) {
-            fprintf(s_dump_log, "target %08X %ux%u pitch %u bpp %u\n", s_rts[i].va, s_rts[i].lw, s_rts[i].lh,
+            fprintf(s_dump_log, "target %08X fmt %X %ux%u pitch %u bpp %u\n", s_rts[i].va, s_rts[i].fmt, s_rts[i].lw, s_rts[i].lh,
                     s_rts[i].pitch, s_rts[i].bpp);
             dump_target(&s_rts[i]);
         }
@@ -1855,13 +1907,42 @@ static void dump_draw(const Target *rt, const Depth *ds, const Nv2aBatch *b)
     fprintf(s_dump_log, "draw rt %08X ds %08X n %u p0 %.1f %.1f z %.1f rhw %.4f c %08X t", rt->va, ds ? ds->va : 0,
             b->count, v[0].x, v[0].y, v[0].z, v[0].rhw, v[0].diffuse);
     for (i = 0; i < 4; i++)
-        fprintf(s_dump_log, " %08X", b->stage[i] ? b->stage[i]->offset : (b->texture && !i ? b->texture->offset : 0));
+        fprintf(s_dump_log, " %08X/%X%s", b->stage[i] ? b->stage[i]->offset : (b->texture && !i ? b->texture->offset : 0), b->stage[i] ? b->stage[i]->color : 0, b->stage[i] && b->stage[i]->normalized ? "n" : "");
     fprintf(s_dump_log, " bl %u %X %X zt %u f %X w %u at %u f %X r %u cm %X cull %u st %u rc %d prog %X sf %X ref %X m %X wm %X ops %X %X %X\n",
             r->blend_enable, r->blend_src, r->blend_dst,
             r->depth_test_enable, r->depth_func, r->depth_write, r->alpha_test_enable, r->alpha_func, r->alpha_ref,
             r->color_mask, r->cull_enable, r->stencil_enable, b->rc != NULL, b->rc ? b->rc->stage_program : 0,
             r->stencil_func, r->stencil_ref, r->stencil_func_mask, r->stencil_write_mask,
             r->stencil_fail, r->stencil_zfail, r->stencil_zpass);
+    if (b->program) { /* DBG: the vertex inputs */
+        const Nv2aProgramDraw *p = b->program;
+        uint32_t s;
+        fprintf(s_dump_log, "  vp %016llX in %X slots %u nv %u ni %u imm3 %.3f %.3f %.3f %.3f v0", (unsigned long long)p->hash, p->inputs, p->slots,
+                p->nverts, p->nindices, p->imm[3][0], p->imm[3][1], p->imm[3][2], p->imm[3][3]);
+        for (s = 0; s < p->slots * (p->nverts <= 4 ? p->nverts : 1); s++)
+            fprintf(s_dump_log, " (%.3f %.3f %.3f %.3f)", p->verts[s * 4], p->verts[s * 4 + 1], p->verts[s * 4 + 2], p->verts[s * 4 + 3]);
+        if (p->constants)
+            fprintf(s_dump_log, " c119 %.3f %.3f %.3f %.3f c120 %.3f %.3f %.3f %.3f",
+                    p->constants[119][0], p->constants[119][1], p->constants[119][2], p->constants[119][3],
+                    p->constants[120][0], p->constants[120][1], p->constants[120][2], p->constants[120][3]);
+        if (p->constants && p->nverts <= 4) {
+            static const int cs[] = { 58, 59, 96, 97, 98, 99 };
+            for (s = 0; s < 6; s++)
+                fprintf(s_dump_log, " c%d %g %g %g %g", cs[s], p->constants[cs[s]][0], p->constants[cs[s]][1],
+                        p->constants[cs[s]][2], p->constants[cs[s]][3]);
+            fprintf(s_dump_log, " near %g aa %g %g", p->near_z, p->aa[0], p->aa[1]);
+        }
+        fprintf(s_dump_log, "\n");
+    }
+    if (b->rc) { /* DBG: the combiner words */
+        const Nv2aCombiner *k = b->rc;
+        uint32_t s, n = k->control & 0xFF;
+        fprintf(s_dump_log, "  rc ctl %X fin %08X %08X fc %08X %08X", k->control, k->final0, k->final1, k->final_c0, k->final_c1);
+        for (s = 0; s < n && s < 8; s++)
+            fprintf(s_dump_log, " | %08X %08X %08X %08X f %08X %08X", k->color_icw[s], k->color_ocw[s],
+                    k->alpha_icw[s], k->alpha_ocw[s], k->factor0[s], k->factor1[s]);
+        fprintf(s_dump_log, "\n");
+    }
 }
 
 static void gpu_draw_on(Target *rt, Depth *ds, const Nv2aBatch *b)
@@ -1927,6 +2008,8 @@ static void gpu_draw_on(Target *rt, Depth *ds, const Nv2aBatch *b)
             continue;
         if (!t)
             continue;               /* the executor's white */
+        if (t->alpha_kill)
+            key.kill_mask |= 1u << st;
         smp[st] = get_sampler(t);
         {
             float ox = 0, oy = 0;
@@ -2002,6 +2085,7 @@ static void gpu_draw_on(Target *rt, Depth *ds, const Nv2aBatch *b)
     }
 
     if (b->program) {
+        prog_cull(r);
         prog_draw(rt, b->program);
         return;
     }
