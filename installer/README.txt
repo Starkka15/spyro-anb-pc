@@ -26,9 +26,37 @@ starts the game straight away with the settings you saved.
   F9            release the mouse (press again to capture it)
   Close window  quit to the desktop (a save in progress is finished first)
 
-An Xbox-style controller (or any controller Windows sees as one) works, and
-can be plugged in or out at any time. If the controller you are using is
-unplugged, the game pauses; plug it back in, or press a key, to carry on.
+An Xbox-style controller (or any controller Windows sees as one) works, and so
+do the PlayStation 5 DualSense and PlayStation 4 DualShock 4, over USB or
+Bluetooth, with no extra software. Controllers can be plugged in or out at any
+time. If the controller you are using is unplugged, the game pauses; plug it
+back in, or press a key, to carry on.
+
+The on-screen button prompts show Xbox, PlayStation or Nintendo Switch buttons.
+"Button prompts" in the launcher sets which; Auto picks PlayStation for a Sony
+controller, Switch for a Nintendo one, and Xbox for everything else. Some
+controllers present themselves as Xbox ones (many third-party pads, adapters,
+Steam Input), so Auto can't tell what they are: choose the style yourself.
+
+
+Voices and text from the European PS2 disc
+------------------------------------------
+
+The Xbox game's cutscenes only have English voices, and some lines of its
+translations were left in English. The European PS2 release (SLES-54359) has
+the cutscenes dubbed in French, Spanish, German, Italian and Dutch and finishes
+more of the text. If you have it, the launcher can copy both from it:
+
+  1. Click "Add from PS2 disc..." in the launcher.
+  2. Choose the PS2 disc in a drive, a folder with its files, or an .iso of it.
+  3. Choose the language under Language.
+
+This needs about 700 MB. The PS2 disc isn't needed afterwards, and the game's
+own files are not changed: the voices and text are kept in the "lang" folder
+beside the game. The US PS2 disc has English cutscenes only and won't work.
+
+Lines that talk about the Xbox console (the autosave warning, the Dashboard)
+are reworded for PC in every language, with or without the PS2 disc.
 
 
 Keyboard and mouse
@@ -65,6 +93,12 @@ The launcher writes spyro.ini beside the game. You can edit it by hand too:
                               matches your monitor
   VSync                       no tearing, slightly more input lag
   Skip intro movies           straight to the title screen
+  Language                    English, French, Spanish, German, Italian or
+                              Dutch; Auto follows Windows
+  Button prompts              Auto, Xbox, PlayStation or Nintendo Switch
+  Console (spyro.ini only)    US or PAL: what console the game thinks it
+                              runs on. PAL makes the game switch languages
+                              itself, the way a European Xbox does
   Log                         write spyro.log, for bug reports
 
 

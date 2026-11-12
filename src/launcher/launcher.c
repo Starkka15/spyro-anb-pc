@@ -17,6 +17,7 @@
 #include "settings.h"
 #include "launcher_res.h"
 #include "import.h"
+#include "dubs.h"
 
 #define GAME_EXE L"spyro_anb_recomp.exe"
 
@@ -167,6 +168,7 @@ static void show(HWND dlg, const SpyroSettings *s, const MouseSettings *m)
     show_sens(dlg);
     CheckDlgButton(dlg, IDC_INVERT, m->invert ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(dlg, IDC_SKIP, s->skip_intros ? BST_CHECKED : BST_UNCHECKED);
+    select_data(dlg, IDC_PROMPTS, s->button_prompts);
     select_data(dlg, IDC_LANG, s->language);
     select_data(dlg, IDC_MODE, s->fullscreen);
     fill_sizes(dlg, s->window_width, s->window_height);
@@ -195,6 +197,7 @@ static void save(HWND dlg)
     s.keyboard_mouse = IsDlgButtonChecked(dlg, IDC_MKB) == BST_CHECKED;
     s.skip_intros = IsDlgButtonChecked(dlg, IDC_SKIP) == BST_CHECKED;
     s.language = (int)selected_data(dlg, IDC_LANG);
+    s.button_prompts = (int)selected_data(dlg, IDC_PROMPTS);
 
     settings_set_int("Fullscreen", s.fullscreen);
     settings_set_int("WindowWidth", s.window_width);
@@ -205,6 +208,7 @@ static void save(HWND dlg)
     settings_set_int("KeyboardMouse", s.keyboard_mouse);
     settings_set_int("SkipIntros", s.skip_intros);
     settings_set_str("Language", settings_language_name(s.language));
+    settings_set_str("ButtonPrompts", settings_prompts_name(s.button_prompts));
     g_settings = s;
     {
         char v[16];
@@ -256,14 +260,67 @@ static int game_present(void)
 #endif
 }
 
+/* The folder the game reads its files from: game_files, or the development
+ * tree when game_files has no game. */
+static void game_source(wchar_t *out)
+{
+    game_dir(out);
+#ifdef SPYRO_DEV_GAME_DIR
+    if (!import_installed(out))
+        wcscpy(out, L"" SPYRO_DEV_GAME_DIR);
+#endif
+}
+
 static void show_game_status(HWND dlg)
 {
     int ok = game_present();
+    wchar_t dubs[MAX_PATH];
     SetDlgItemTextW(dlg, IDC_GAME_STATUS, ok ? L"Game files: installed" : L"Game files: not installed yet");
     SetDlgItemTextW(dlg, IDC_GAMEFILES, ok ? L"Reinstall game files..." : L"Install game files...");
+    beside_exe(dubs, MAX_PATH, L"lang");
+    SetDlgItemTextW(dlg, IDC_DUBS_STATUS, dubs_installed(dubs) ? L"PS2 voices and text: added"
+                                                               : L"PS2 voices and text: not added");
+    EnableWindow(GetDlgItem(dlg, IDC_DUBS), ok);
 }
 
-/* A folder or disc drive (pick_folder) or a disc image file. */
+static int pick(HWND dlg, int pick_folder, wchar_t *out);
+
+/* Dubbed cutscene audio from a European PS2 disc (dubs.c). */
+static void add_dubs(HWND dlg)
+{
+    static const TASKDIALOG_BUTTON BUTTONS[] = {
+        { 100, L"From the disc\nThe PS2 disc in a drive that can read it." },
+        { 101, L"From a disc image\nAn .iso of the PS2 disc." },
+    };
+    TASKDIALOGCONFIG tc;
+    wchar_t src[MAX_PATH], game[MAX_PATH], out[MAX_PATH];
+    int choice = 0;
+
+    memset(&tc, 0, sizeof tc);
+    tc.cbSize = sizeof tc;
+    tc.hwndParent = dlg;
+    tc.dwFlags = TDF_USE_COMMAND_LINKS | TDF_ALLOW_DIALOG_CANCELLATION;
+    tc.dwCommonButtons = TDCBF_CANCEL_BUTTON;
+    tc.pszWindowTitle = L"Add from the PS2 disc";
+    tc.pszMainInstruction = L"Where is your European PS2 disc?";
+    tc.pszContent = L"The Xbox game's cutscenes have English voices only, and its translations leave some lines "
+                    L"in English. The European (PAL) PS2 release of The Legend of Spyro: A New Beginning has the "
+                    L"cutscenes in French, Spanish, German, Italian and Dutch, and finishes more of the text. Both "
+                    L"are copied from your disc (about 700 MB) and follow the language chosen under Language.";
+    tc.pButtons = BUTTONS;
+    tc.cButtons = 2;
+    if (FAILED(TaskDialogIndirect(&tc, &choice, NULL, NULL)) || (choice != 100 && choice != 101))
+        return;
+    if (!pick(dlg, choice == 100 ? 1 : 2, src))
+        return;
+    game_source(game);
+    beside_exe(out, MAX_PATH, L"lang");
+    dubs_import(dlg, src, game, out, 0);
+    show_game_status(dlg);
+}
+
+/* A folder or disc drive (pick_folder 1), a PS2 disc image (2), or an Xbox
+ * disc image file (0). */
 static int pick(HWND dlg, int pick_folder, wchar_t *out)
 {
     IFileOpenDialog *fd;
@@ -274,9 +331,16 @@ static int pick(HWND dlg, int pick_folder, wchar_t *out)
     if (FAILED(CoCreateInstance(&CLSID_FileOpenDialog, NULL, CLSCTX_INPROC_SERVER, &IID_IFileOpenDialog,
                                 (void **)&fd)))
         return 0;
-    if (pick_folder) {
+    if (pick_folder == 1) {
         IFileOpenDialog_SetOptions(fd, FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
         IFileOpenDialog_SetTitle(fd, L"The game's folder or disc drive (the one with default.xbe)");
+    } else if (pick_folder == 2) {
+        static const COMDLG_FILTERSPEC TYPES[] = {
+            { L"PS2 disc images (*.iso)", L"*.iso" }, { L"All files", L"*.*" },
+        };
+        IFileOpenDialog_SetOptions(fd, FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST);
+        IFileOpenDialog_SetFileTypes(fd, 2, TYPES);
+        IFileOpenDialog_SetTitle(fd, L"The European PS2 disc image");
     } else {
         static const COMDLG_FILTERSPEC TYPES[] = {
             { L"Xbox disc images (*.iso, *.xiso)", L"*.iso;*.xiso" }, { L"All files", L"*.*" },
@@ -367,10 +431,14 @@ static INT_PTR CALLBACK dlg_proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
                      (LPARAM)LoadImageW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(1), IMAGE_ICON, 16, 16, 0));
         add_item(dlg, IDC_MODE, L"Windowed", 0);
         add_item(dlg, IDC_MODE, L"Fullscreen (borderless)", 1);
+        add_item(dlg, IDC_PROMPTS, L"Auto (follows the controller)", PROMPTS_AUTO);
+        add_item(dlg, IDC_PROMPTS, L"Xbox", PROMPTS_XBOX);
+        add_item(dlg, IDC_PROMPTS, L"PlayStation", PROMPTS_PLAYSTATION);
+        add_item(dlg, IDC_PROMPTS, L"Nintendo Switch", PROMPTS_SWITCH);
         {
             /* Each language in its own name, so a player can find theirs. */
             static const wchar_t *const names[LANGUAGE_COUNT] = {
-                NULL, L"English", L"Français (French)", L"Español (Spanish)",
+                NULL, L"English", L"Fran\u00E7ais (French)", L"Espa\u00F1ol (Spanish)",
                 L"Deutsch (German)", L"Italiano (Italian)", L"Nederlands (Dutch)",
             };
             wchar_t t[64];
@@ -418,6 +486,9 @@ static INT_PTR CALLBACK dlg_proc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         case IDC_GAMEFILES:
             install_game_files(dlg);
             return TRUE;
+        case IDC_DUBS:
+            add_dubs(dlg);
+            return TRUE;
         case IDC_DEFAULTS:
             show(dlg, &s_defaults, &MOUSE_DEFAULTS);
             return TRUE;
@@ -457,6 +528,14 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show_cmd)
         wchar_t dest[MAX_PATH];
         game_dir(dest);
         return import_game(NULL, argv[2], dest, 1);
+    }
+    /* Setup: spyro_launcher.exe /import-dubs <PS2 drive, folder or image>.
+     * The exit code is the DUBS_ result. */
+    if (argv && argc >= 3 && !_wcsicmp(argv[1], L"/import-dubs")) {
+        wchar_t game[MAX_PATH], out[MAX_PATH];
+        game_source(game);
+        beside_exe(out, MAX_PATH, L"lang");
+        return dubs_import(NULL, argv[2], game, out, 1);
     }
     s_defaults = g_settings;
     settings_load();

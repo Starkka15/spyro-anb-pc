@@ -8,7 +8,7 @@
 ;
 ;   G:\InnoSetup\ISCC.exe installer\spyro.iss      -> release\
 
-#define AppVersion "1.0.3"
+#define AppVersion "1.1.0"
 #define AppTitle "The Legend of Spyro - A New Beginning"
 
 [Setup]
@@ -55,6 +55,7 @@ Filename: "{app}\spyro_launcher.exe"; Description: "Open the launcher"; Flags: n
 ; The copied game and what the programs write beside themselves. Saves are
 ; elsewhere (%LOCALAPPDATA%\xboxrecomp) and stay.
 Type: filesandordirs; Name: "{app}\game_files"
+Type: filesandordirs; Name: "{app}\lang"
 Type: files; Name: "{app}\spyro.ini"
 Type: files; Name: "{app}\mkb.ini"
 Type: files; Name: "{app}\spyro.log"

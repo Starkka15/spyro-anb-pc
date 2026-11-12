@@ -60,6 +60,7 @@ set(GAME_SOURCES
     src/gpu_vsh.c
     src/settings.c
     src/prompts.c
+    src/text_pc.c
     src/sampler.c
     src/game.rc
     # Add game-specific sources here, e.g.:
@@ -117,6 +118,8 @@ endif()
 add_executable(spyro_launcher WIN32
     src/launcher/launcher.c
     src/launcher/import.c
+    src/launcher/dubs.c
+    src/text_pc.c
     src/launcher/launcher.rc
     src/launcher/launcher.manifest
     src/settings.c

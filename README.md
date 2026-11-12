@@ -24,12 +24,39 @@ Download `SpyroANB-PC-<version>-Setup.exe` from
 [Releases](../../releases), run it, and point it at your copy of the game.
 Windows 10 or 11 (64-bit) with a DirectX 11 graphics card.
 
-- Keyboard and mouse or any XInput controller; on-screen button prompts follow
-  the device you used last. Keys can be changed in `mkb.ini`.
-- The launcher sets fullscreen, window size, render scale, widescreen, VSync
-  and skipping the logo movies.
+- Keyboard and mouse, any XInput controller, or a DualSense / DualShock 4
+  (USB or Bluetooth, read directly, no extra software). Keys can be changed in
+  `mkb.ini`.
+- On-screen button prompts follow the device you used last, with Xbox,
+  PlayStation or Nintendo Switch glyphs for controllers (picked automatically
+  for Sony and Nintendo pads, or set under Button prompts).
+- The launcher sets fullscreen, window size, render scale, widescreen, VSync,
+  language and skipping the logo movies.
 - Controllers can be plugged in and out at any time; unplugging the one in use
   pauses the game.
+
+### Dubbed cutscenes from the European PS2 disc
+
+The Xbox game's cutscenes only have English voices, and some of its
+translated text was left in English. The European PS2 release (SLES-54359,
+"Europe, Australia") has the cutscenes dubbed in French, Spanish, German,
+Italian and Dutch and finishes more of the text, so the launcher can borrow
+them from it:
+
+1. Install the game as usual from your Xbox copy.
+2. In the launcher, click **Add from PS2 disc...** and choose the PS2 disc in
+   a drive, a folder with its files, or an `.iso` of it.
+3. Pick the language under **Language**.
+
+It takes about 700 MB of disk space. Nothing from the PS2 disc is needed
+afterwards, and it changes nothing in the game's files: the voices and text
+are read from the `lang` folder beside the game. The US PS2 disc won't work;
+its cutscenes are English only. Italian also gets the port's own fixes for
+the lines both releases left in English.
+
+The port also rewords the few lines that talk about the Xbox console (the
+autosave warning, the Dashboard) for PC, in every language, with or without
+the PS2 disc.
 
 See [installer/README.txt](installer/README.txt) for the full player notes.
 

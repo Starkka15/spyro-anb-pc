@@ -41,6 +41,7 @@
 /* xboxrecomp runtime headers */
 #include <xbox/xboxrecomp.h>
 
+#include "text_pc.h"
 #include "settings.h"
 #include "version.h"
 
@@ -492,11 +493,28 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     /* The logo movies are skipped by not being there (kernel_file.c). */
     if (!getenv("RECOMP_HIDE_FILES") && g_settings.skip_intros)
         _putenv_s("RECOMP_HIDE_FILES", "Video\\sierra2_60.xmv;Video\\krome_60.xmv;Video\\tislogo_60.xmv");
+    /* Console = PAL: a European Xbox with PAL60 on. XGetVideoStandard then reads PAL-I from the factory
+     * AV region, so sub_0027E7B0 leaves 0x39F350 at 0 and the game runs its European path: it asks the
+     * console's language (XGetLanguage, mapped by sub_00280380) and switches what it localizes only there.
+     * The PAL60 flag (0x40) keeps its 60 Hz timing and the _60 movies. */
     if (!getenv("RECOMP_VIDEO_FLAGS"))
-        _putenv_s("RECOMP_VIDEO_FLAGS", g_settings.widescreen ? "1" : "0");
-    /* Applied to the game's language table after the memory init. */
+        _putenv_s("RECOMP_VIDEO_FLAGS", g_settings.pal ? (g_settings.widescreen ? "0x41" : "0x40")
+                                                      : (g_settings.widescreen ? "1" : "0"));
+    /* Language: on a US console, applied to the game's language table after the memory init; on PAL,
+     * the console's language. Dutch has no console language, so the game's own "lang" option (launch
+     * data read as a command line, sub_002147C0) picks it. */
     s_language = settings_language_resolve(g_settings.language);
-    printf("Language: %s\n", settings_language_name(s_language));
+    printf("Language: %s, console %s\n", settings_language_name(s_language), g_settings.pal ? "PAL" : "US");
+    if (g_settings.pal) {
+        /* XC_LANGUAGE: 1 English, 3 German, 4 French, 5 Spanish, 6 Italian. */
+        static const char *const xc[LANGUAGE_COUNT] = { "1", "1", "4", "5", "3", "6", "1" };
+        if (!getenv("RECOMP_AV_REGION"))
+            _putenv_s("RECOMP_AV_REGION", "0x00800300");
+        if (!getenv("RECOMP_LANGUAGE"))
+            _putenv_s("RECOMP_LANGUAGE", xc[s_language]);
+        if (s_language == LANGUAGE_DUTCH && !getenv("RECOMP_CMDLINE"))
+            _putenv_s("RECOMP_CMDLINE", "lang=NL");
+    }
     /* Audio init waits on the APU, and nothing is shown without the pushbuffer executor and its window. */
     _putenv_s("RECOMP_AC97_READY", "1");
     _putenv_s("RECOMP_PB_EXEC", "1");
@@ -543,6 +561,26 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                     "The Legend of Spyro: A New Beginning", MB_ICONERROR);
         return 1;
     }
+    /* lang/<LANG> holds read overlays (kernel_file.c). data_xb.rkv.ovl gives the text the port's PC
+     * wording (text_pc.c: no Xbox console, no Dashboard), refreshed here for the chosen language and merged
+     * with the European PS2 disc's finished translations when those were imported. The other files are
+     * the dubbed audio of the _60 movies from that disc (the launcher's import, or tools/ps2_dubs.py). */
+    if (!getenv("RECOMP_READ_OVERLAY") && s_language >= 1) {
+        static const char *const code[LANGUAGE_COUNT] = { NULL, "EN", "FR", "ES", "DE", "IT", "NL" };
+        char dir[MAX_PATH];
+        wchar_t wgame[MAX_PATH], wdir[MAX_PATH];
+        DWORD attr;
+        snprintf(dir, sizeof dir, "%s\\lang\\%s", s_exe_dir, code[s_language]);
+        MultiByteToWideChar(CP_ACP, 0, s_game_dir, -1, wgame, MAX_PATH);
+        MultiByteToWideChar(CP_ACP, 0, dir, -1, wdir, MAX_PATH);
+        if (!text_pc_refresh(wgame, wdir, s_language - 1))
+            printf("PC wording: not applied (%s)\n", dir);
+        attr = GetFileAttributesA(dir);
+        if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+            _putenv_s("RECOMP_READ_OVERLAY", dir);
+            printf("Read overlays: %s\n", dir);
+        }
+    }
     {
         char xbe[MAX_PATH];
         snprintf(xbe, sizeof xbe, "%s\\default.xbe", s_game_dir);
@@ -579,7 +617,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     {
         static const int entry[LANGUAGE_COUNT] = { 0, 0, 2, 3, 4, 5, 6 };
         int e = entry[s_language];
-        if (e) {
+        if (e && !g_settings.pal) {
             uint32_t *table = (uint32_t *)((uint8_t *)g_xbox_mem_offset + 0x39F590u);
             memcpy(table, table + e * 5, 4 * sizeof(uint32_t));
         }

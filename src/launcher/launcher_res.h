@@ -25,5 +25,8 @@
 #define IDC_IMPORT_BAR  1021
 #define IDC_GAMEFILES   1022
 #define IDC_GAME_STATUS 1023
+#define IDC_DUBS        1024
+#define IDC_DUBS_STATUS 1025
+#define IDC_PROMPTS     1026
 
 #endif

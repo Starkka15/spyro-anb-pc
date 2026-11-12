@@ -2,7 +2,7 @@
 #ifndef SPYRO_VERSION_H
 #define SPYRO_VERSION_H
 
-#define SPYRO_PORT_VERSION     "1.0.3"
-#define SPYRO_PORT_VERSION_RC  1,0,3,0
+#define SPYRO_PORT_VERSION     "1.1.0"
+#define SPYRO_PORT_VERSION_RC  1,1,0,0
 
 #endif

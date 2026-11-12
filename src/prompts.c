@@ -21,6 +21,7 @@
 
 #include "mkb_input.h"
 #include "prompts.h"
+#include "settings.h"
 
 #define SHEET_W 256
 #define SHEET_H 128
@@ -308,4 +309,182 @@ uint32_t *prompts_build(const uint32_t *orig, uint32_t scale)
             draw_binding(&c, x0, y0, x1, y1, label);
     }
     return c.px;
+}
+
+/* ---- other controllers' buttons ---------------------------------------- */
+/*
+ * The same cells, holding another controller's buttons in the places a pad
+ * maps to the Xbox ones (input/xinput_device.c, and SDL/Steam's default,
+ * which go by position): Black is the left bumper, White the right one.
+ *
+ *   PlayStation: A cross, B circle, X square, Y triangle, L1 R1, L2 R2,
+ *                Back SELECT, Start START.
+ *   Switch:      by position, so the bottom button (Xbox A) is Nintendo's B,
+ *                the right one A, the left one Y, the top one X; L R, ZL ZR,
+ *                Back -, Start +.
+ *
+ * The sticks and the D-pad are the same on all of them and stay as the game
+ * draws them.
+ */
+enum { PS_CROSS, PS_CIRCLE, PS_SQUARE, PS_TRIANGLE, FACE_LETTER };
+typedef struct { int cell; int symbol; const char *text; } StyleCell;
+static const StyleCell PS_CELLS[] = {
+    { 8, PS_CROSS, NULL },     /* ) A */
+    { 7, PS_CIRCLE, NULL },    /* ( B */
+    { 9, PS_SQUARE, NULL },    /* * X */
+    { 6, PS_TRIANGLE, NULL },  /* ' Y */
+    { 10, -1, "L1" },          /* + Black */
+    { 0, -1, "R1" },           /* ! White */
+    { 1, -1, "L2" },           /* " left trigger */
+    { 11, -1, "R2" },          /* , right trigger */
+    { 12, -1, "SELECT" },      /* - Back */
+    { 13, -1, "START" },       /* / Start */
+    { -1, 0, NULL },
+};
+static const StyleCell SWITCH_CELLS[] = {
+    { 8, FACE_LETTER, "B" },   /* ) A, the bottom button */
+    { 7, FACE_LETTER, "A" },   /* ( B, the right one */
+    { 9, FACE_LETTER, "Y" },   /* * X, the left one */
+    { 6, FACE_LETTER, "X" },   /* ' Y, the top one */
+    { 10, -1, "L" },           /* + Black */
+    { 0, -1, "R" },            /* ! White */
+    { 1, -1, "ZL" },           /* " left trigger */
+    { 11, -1, "ZR" },          /* , right trigger */
+    { 12, -1, "\xE2\x88\x92" },     /* - Back: minus */
+    { 13, -1, "+" },           /* / Start: plus */
+    { -1, 0, NULL },
+};
+
+static float sd_segment(float px, float py, float ax, float ay, float bx, float by)
+{
+    float vx = bx - ax, vy = by - ay, wx = px - ax, wy = py - ay;
+    float t = (wx * vx + wy * vy) / (vx * vx + vy * vy);
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    wx -= vx * t;
+    wy -= vy * t;
+    return sqrtf(wx * wx + wy * wy);
+}
+
+/* A face button: a dark disc with the symbol outlined in its colour. */
+static void draw_face(Canvas *c, float x0, float y0, float x1, float y1, int symbol, const char *letter)
+{
+    static const uint32_t COLOUR[4] = { 0x7CA9F0u, 0xF2646Eu, 0xE68FD2u, 0x3FD6A6u };
+    float s = (y1 - y0) / 32.0f;
+    float cx = (x0 + x1) / 2, cy = (y0 + y1) / 2 - s;
+    float r = ((x1 - x0) < (y1 - y0) ? (x1 - x0) : (y1 - y0)) / 2 - 2 * s;
+    float sym = r * 0.52f, t = 1.6f * s;    /* symbol radius, half the stroke */
+    int x, y;
+
+    fill_round_rect(c, cx - r + s, cy - r + 2 * s, cx + r + s, cy + r + 2 * s, r, 0x000000u, 0.45f);  /* shadow */
+    fill_round_rect(c, cx - r, cy - r, cx + r, cy + r, r, CAP_EDGE, 1.0f);
+    fill_round_rect(c, cx - r + 2 * s, cy - r + 2 * s, cx + r - 2 * s, cy + r - 2 * s, r - 2 * s, CAP_FILL, 1.0f);
+    if (symbol == FACE_LETTER) {
+        float in = r * 0.62f;
+        draw_text(c, letter, (int)(cx - in), (int)(cy - in), (int)(2 * in), (int)(2 * in), CAP_TEXT);
+        return;
+    }
+    for (y = (int)(cy - r); y <= (int)(cy + r); y++)
+        for (x = (int)(cx - r); x <= (int)(cx + r); x++) {
+            float px = x + 0.5f, py = y + 0.5f, d;
+            switch (symbol) {
+            case PS_CROSS: {
+                float a = sd_segment(px, py, cx - sym * 0.8f, cy - sym * 0.8f, cx + sym * 0.8f, cy + sym * 0.8f);
+                float b = sd_segment(px, py, cx - sym * 0.8f, cy + sym * 0.8f, cx + sym * 0.8f, cy - sym * 0.8f);
+                d = (a < b ? a : b) - t;
+                break;
+            }
+            case PS_CIRCLE:
+                d = fabsf(sqrtf((px - cx) * (px - cx) + (py - cy) * (py - cy)) - sym * 0.85f) - t;
+                break;
+            case PS_SQUARE:
+                d = fabsf(sd_round_rect(px, py, cx, cy, sym * 0.72f, sym * 0.72f, 0.5f * s)) - t;
+                break;
+            default: {      /* triangle, point up, centred on its centroid */
+                float h = sym * 1.5f, ty = cy - h * 0.62f, by = cy + h * 0.38f, hw = h * 0.577f;
+                float a = sd_segment(px, py, cx, ty, cx - hw, by);
+                float b = sd_segment(px, py, cx - hw, by, cx + hw, by);
+                float e = sd_segment(px, py, cx + hw, by, cx, ty);
+                d = (a < b ? (a < e ? a : e) : (b < e ? b : e)) - t;
+                break;
+            }
+            }
+            blend(c, x, y, COLOUR[symbol], 0.5f - d);
+        }
+}
+
+uint32_t *prompts_build_style(const uint32_t *orig, uint32_t scale, int style)
+{
+    const StyleCell *cells = style == PROMPTS_SWITCH ? SWITCH_CELLS : PS_CELLS;
+    Canvas c;
+    size_t i;
+    uint32_t x, y;
+
+    if (scale < 1)
+        scale = 1;
+    c.w = SHEET_W * (int)scale;
+    c.h = SHEET_H * (int)scale;
+    c.px = (uint32_t *)calloc((size_t)c.w * c.h, 4);
+    if (!c.px)
+        return NULL;
+    for (y = 0; y < (uint32_t)c.h; y++)
+        for (x = 0; x < (uint32_t)c.w; x++)
+            c.px[(size_t)y * c.w + x] = orig[(y / scale) * SHEET_W + x / scale];
+    for (i = 0; cells[i].cell >= 0; i++) {
+        int k = cells[i].cell;
+        float x0 = (float)(CELLS[k].x0 * (int)scale), y0 = (float)(CELLS[k].y0 * (int)scale);
+        float x1 = (float)(CELLS[k].x1 * (int)scale), y1 = (float)(CELLS[k].y1 * (int)scale);
+        for (y = (uint32_t)y0; y < (uint32_t)y1; y++)
+            memset(&c.px[(size_t)y * c.w + (uint32_t)x0], 0, (size_t)(x1 - x0) * 4);
+        if (cells[i].symbol < 0)
+            draw_cap(&c, x0, y0, x1, y1, cells[i].text);
+        else
+            draw_face(&c, x0, y0, x1, y1, cells[i].symbol, cells[i].text);
+    }
+    return c.px;
+}
+
+/* Which maker's controller is connected: a HID game pad or joystick with
+ * Sony's or Nintendo's vendor id. Asked at most every two seconds. A pad
+ * behind Steam Input or an adapter (PS2) doesn't show as either;
+ * ButtonPrompts covers it. */
+static int connected_style(void)
+{
+    static ULONGLONG next;
+    static int found = PROMPTS_XBOX;
+    ULONGLONG now = GetTickCount64();
+    UINT n = 0, i;
+    RAWINPUTDEVICELIST *list;
+
+    if (now < next)
+        return found;
+    next = now + 2000;
+    found = PROMPTS_XBOX;
+    if (GetRawInputDeviceList(NULL, &n, sizeof *list) != 0 || !n)
+        return found;
+    list = (RAWINPUTDEVICELIST *)malloc(n * sizeof *list);
+    if (!list)
+        return found;
+    n = GetRawInputDeviceList(list, &n, sizeof *list);
+    for (i = 0; i < n && n != (UINT)-1; i++) {
+        RID_DEVICE_INFO info;
+        UINT size = sizeof info;
+        if (list[i].dwType != RIM_TYPEHID)
+            continue;
+        info.cbSize = sizeof info;
+        if (GetRawInputDeviceInfoW(list[i].hDevice, RIDI_DEVICEINFO, &info, &size) == (UINT)-1)
+            continue;
+        if (info.hid.usUsagePage != 0x01 || (info.hid.usUsage != 0x05 && info.hid.usUsage != 0x04))
+            continue;
+        if (info.hid.dwVendorId == 0x054C)
+            found = PROMPTS_PLAYSTATION;
+        else if (info.hid.dwVendorId == 0x057E && found == PROMPTS_XBOX)
+            found = PROMPTS_SWITCH;
+    }
+    free(list);
+    return found;
+}
+
+int prompts_style(int setting)
+{
+    return setting == PROMPTS_AUTO ? connected_style() : setting;
 }

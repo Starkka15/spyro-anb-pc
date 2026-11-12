@@ -962,39 +962,77 @@ static void note_buttons(TexEntry *e, const Nv2aTexture *t, const uint32_t *px)
         memcpy(s_buttons_orig, px, 256 * 128 * 4);
 }
 
+/* The save icon: the game draws an Xbox console on its autosave notice and
+ * while it saves. On PC it shows a PC instead (tools/pc_icon.py), swapped in
+ * when the console texture is decoded. */
+#define SAVE_ICON_HASH 0xFA042A0A8A892807ull
+static const uint32_t SAVE_ICON_PC[64 * 64] = {
+#include "save_icon.inc"
+};
+
+static void swap_save_icon(const Nv2aTexture *t, uint32_t *px)
+{
+    if (t->width != 64 || t->height != 64 || t->cube)
+        return;
+    if (hash_words(0xCBF29CE484222325ull, (const uint8_t *)px, 64 * 64 * 4) == SAVE_ICON_HASH)
+        memcpy(px, SAVE_ICON_PC, sizeof SAVE_ICON_PC);
+}
+
+/* A sheet built from the controller sheet, as a texture at the render scale. */
+static ID3D11ShaderResourceView *sheet_srv(uint32_t *px)
+{
+    D3D11_TEXTURE2D_DESC d;
+    D3D11_SUBRESOURCE_DATA sd;
+    ID3D11Texture2D *tex;
+    ID3D11ShaderResourceView *srv = NULL;
+    if (!px)
+        return NULL;
+    memset(&d, 0, sizeof d);
+    d.Width = 256 * s_scale;
+    d.Height = 128 * s_scale;
+    d.MipLevels = 1;
+    d.ArraySize = 1;
+    d.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    d.SampleDesc.Count = 1;
+    d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    sd.pSysMem = px;
+    sd.SysMemPitch = d.Width * 4;
+    sd.SysMemSlicePitch = 0;
+    CHECK(ID3D11Device_CreateTexture2D(s_dev, &d, &sd, &tex));
+    CHECK(ID3D11Device_CreateShaderResourceView(s_dev, (ID3D11Resource *)tex, NULL, &srv));
+    ID3D11Texture2D_Release(tex);
+    free(px);
+    return srv;
+}
+
+/* Which glyph sheet the game's prompts sample: the keyboard one while the
+ * keyboard or mouse was last used, else the PlayStation or Switch one
+ * when ButtonPrompts asks for it (or Auto finds that maker's controller), else
+ * the game's own Xbox one. */
 static ID3D11ShaderResourceView *tex_srv(const TexEntry *e)
 {
-    static int force = -2;  /* DBG: RECOMP_PROMPTS=kb|pad pins the prompt style */
+    static int force = -2;  /* DBG: RECOMP_PROMPTS=kb|pad|ps|switch pins the prompt style */
+    static ID3D11ShaderResourceView *s_style_buttons[PROMPTS_COUNT];
+    int style;
+    if (!e->buttons)
+        return e->srv;
     if (force == -2) {
         const char *p = getenv("RECOMP_PROMPTS");
-        force = !p ? -1 : !strcmp(p, "kb") ? 1 : !strcmp(p, "pad") ? 0 : -1;
+        force = !p ? -1 : !strcmp(p, "kb") ? 1 : !strcmp(p, "pad") ? 0 : !strcmp(p, "ps") ? 2
+              : !strcmp(p, "switch") ? 3 : -1;
     }
-    if (!e->buttons || (force >= 0 ? !force : !mkb_enabled() || !mkb_last_device_keyboard()))
+    if (force == 1 || (force < 0 && mkb_enabled() && mkb_last_device_keyboard())) {
+        if (!s_kb_buttons && s_buttons_orig)
+            s_kb_buttons = sheet_srv(prompts_build(s_buttons_orig, s_scale));
+        return s_kb_buttons ? s_kb_buttons : e->srv;
+    }
+    style = force == 2 ? PROMPTS_PLAYSTATION : force == 3 ? PROMPTS_SWITCH : force == 0 ? PROMPTS_XBOX
+          : prompts_style(g_settings.button_prompts);
+    if (style != PROMPTS_PLAYSTATION && style != PROMPTS_SWITCH)
         return e->srv;
-    if (!s_kb_buttons && s_buttons_orig) {
-        uint32_t *px = prompts_build(s_buttons_orig, s_scale);
-        D3D11_TEXTURE2D_DESC d;
-        D3D11_SUBRESOURCE_DATA sd;
-        ID3D11Texture2D *tex;
-        if (!px)
-            return e->srv;
-        memset(&d, 0, sizeof d);
-        d.Width = 256 * s_scale;
-        d.Height = 128 * s_scale;
-        d.MipLevels = 1;
-        d.ArraySize = 1;
-        d.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-        d.SampleDesc.Count = 1;
-        d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-        sd.pSysMem = px;
-        sd.SysMemPitch = d.Width * 4;
-        sd.SysMemSlicePitch = 0;
-        CHECK(ID3D11Device_CreateTexture2D(s_dev, &d, &sd, &tex));
-        CHECK(ID3D11Device_CreateShaderResourceView(s_dev, (ID3D11Resource *)tex, NULL, &s_kb_buttons));
-        ID3D11Texture2D_Release(tex);
-        free(px);
-    }
-    return s_kb_buttons ? s_kb_buttons : e->srv;
+    if (!s_style_buttons[style] && s_buttons_orig)
+        s_style_buttons[style] = sheet_srv(prompts_build_style(s_buttons_orig, s_scale, style));
+    return s_style_buttons[style] ? s_style_buttons[style] : e->srv;
 }
 static TexEntry *s_tex_table[TEX_BUCKETS];
 static uint32_t *s_decode;
@@ -1118,6 +1156,7 @@ static int tex_upload(TexEntry *e, const Nv2aTexture *t)
         if (!f) {
             tex_dump(&face, s_decode);
             note_buttons(e, &face, s_decode);
+            swap_save_icon(&face, s_decode);
         }
         if (e->levels > 1) {
             D3D11_TEXTURE2D_DESC d;

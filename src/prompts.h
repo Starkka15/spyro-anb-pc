@@ -12,4 +12,13 @@
  * decoded controller sheet `orig`. The caller frees it. */
 uint32_t *prompts_build(const uint32_t *orig, uint32_t scale);
 
+/* The sheet with another controller's buttons (PROMPTS_PLAYSTATION or
+ * PROMPTS_SWITCH): face buttons, shoulders, triggers, Back and Start. The
+ * caller frees it. */
+uint32_t *prompts_build_style(const uint32_t *orig, uint32_t scale, int style);
+
+/* The controller whose buttons the prompts show (PROMPTS_XBOX,
+ * PROMPTS_PLAYSTATION or PROMPTS_SWITCH), for a ButtonPrompts setting. */
+int prompts_style(int setting);
+
 #endif

@@ -28,7 +28,7 @@ BEGIN
     END
 END
 
-IDD_LAUNCHER DIALOGEX 0, 0, 262, 288
+IDD_LAUNCHER DIALOGEX 0, 0, 262, 324
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX
 CAPTION "The Legend of Spyro: A New Beginning"
 FONT 9, "Segoe UI", 400, 0, 0x1
@@ -43,26 +43,30 @@ BEGIN
     AUTOCHECKBOX    "Widescreen (16:9)", IDC_WIDE, 17, 78, 228, 10
     AUTOCHECKBOX    "VSync (no tearing, slightly more input lag)", IDC_VSYNC, 17, 94, 228, 10
 
-    GROUPBOX        "Controls", -1, 7, 119, 248, 72
+    GROUPBOX        "Controls", -1, 7, 119, 248, 90
     AUTOCHECKBOX    "Keyboard and mouse play as player 1", IDC_MKB, 17, 135, 150, 10
     PUSHBUTTON      "Key bindings...", IDC_KEYS, 181, 133, 65, 14
     LTEXT           "Mouse sensitivity:", IDC_SENS_LBL, 17, 154, 66, 8
     CONTROL         "", IDC_SENS, "msctls_trackbar32", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, 84, 151, 132, 15
     LTEXT           "", IDC_SENS_VAL, 220, 154, 26, 8
     AUTOCHECKBOX    "Invert camera up and down", IDC_INVERT, 17, 172, 228, 10
+    LTEXT           "Button prompts:", -1, 17, 190, 66, 8
+    COMBOBOX        IDC_PROMPTS, 88, 188, 158, 60, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
 
-    GROUPBOX        "Game", -1, 7, 197, 248, 64
-    LTEXT           "Language:", -1, 17, 213, 66, 8
-    COMBOBOX        IDC_LANG, 88, 211, 158, 120, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    AUTOCHECKBOX    "Skip the company logo movies at startup", IDC_SKIP, 17, 228, 228, 10
-    LTEXT           "", IDC_GAME_STATUS, 17, 245, 150, 8
-    PUSHBUTTON      "Install game files...", IDC_GAMEFILES, 171, 242, 75, 14
+    GROUPBOX        "Game", -1, 7, 215, 248, 82
+    LTEXT           "Language:", -1, 17, 231, 66, 8
+    COMBOBOX        IDC_LANG, 88, 229, 158, 120, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    AUTOCHECKBOX    "Skip the company logo movies at startup", IDC_SKIP, 17, 246, 228, 10
+    LTEXT           "", IDC_GAME_STATUS, 17, 263, 150, 8
+    PUSHBUTTON      "Install game files...", IDC_GAMEFILES, 171, 260, 75, 14
+    LTEXT           "", IDC_DUBS_STATUS, 17, 281, 150, 8
+    PUSHBUTTON      "Add from PS2 disc...", IDC_DUBS, 161, 278, 85, 14
 
-    PUSHBUTTON      "Saves folder", IDC_SAVES, 7, 268, 56, 14
-    PUSHBUTTON      "Defaults", IDC_DEFAULTS, 67, 268, 46, 14
-    DEFPUSHBUTTON   "Play", IDOK, 125, 268, 42, 14
-    PUSHBUTTON      "Save", IDC_SAVE, 170, 268, 42, 14
-    PUSHBUTTON      "Exit", IDCANCEL, 215, 268, 40, 14
+    PUSHBUTTON      "Saves folder", IDC_SAVES, 7, 304, 56, 14
+    PUSHBUTTON      "Defaults", IDC_DEFAULTS, 67, 304, 46, 14
+    DEFPUSHBUTTON   "Play", IDOK, 125, 304, 42, 14
+    PUSHBUTTON      "Save", IDC_SAVE, 170, 304, 42, 14
+    PUSHBUTTON      "Exit", IDCANCEL, 215, 304, 40, 14
 END
 
 IDD_IMPORT DIALOGEX 0, 0, 260, 66

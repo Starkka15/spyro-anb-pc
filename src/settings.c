@@ -25,6 +25,13 @@ SpyroSettings g_settings = {
     .language       = LANGUAGE_AUTO,
 };
 
+static const char *const PROMPTS_NAMES[PROMPTS_COUNT] = { "Auto", "Xbox", "PlayStation", "Switch" };
+
+const char *settings_prompts_name(int prompts)
+{
+    return prompts >= 0 && prompts < PROMPTS_COUNT ? PROMPTS_NAMES[prompts] : PROMPTS_NAMES[0];
+}
+
 static const char *const LANGUAGE_NAMES[LANGUAGE_COUNT] = {
     "Auto", "English", "French", "Spanish", "German", "Italian", "Dutch",
 };
@@ -71,6 +78,10 @@ static const char DEFAULT_FILE[] =
     "; 1 = keyboard and mouse play as player 1, alongside any controller.\r\n"
     "; Key bindings are in mkb.ini beside the game.\r\n"
     "KeyboardMouse = 1\r\n"
+    "; Controller buttons in the game's prompts: Auto, Xbox, PlayStation or Switch.\r\n"
+    "; Auto shows the buttons of a connected Sony or Nintendo controller, Xbox otherwise.\r\n"
+    "; Choose PlayStation for a PS2 controller on an adapter, which can't be told apart.\r\n"
+    "ButtonPrompts = Auto\r\n"
     "\r\n"
     "[Game]\r\n"
     "; 1 = start at the title screen, without the company logo movies.\r\n"
@@ -78,6 +89,11 @@ static const char DEFAULT_FILE[] =
     "; Text language: Auto, English, French, Spanish, German, Italian or Dutch.\r\n"
     "; Auto follows the Windows display language, and English when the game lacks it.\r\n"
     "Language = Auto\r\n"
+    "; The console the game thinks it runs on: US or PAL. On a European (PAL) Xbox\r\n"
+    "; the game takes its language from the console and switches everything it has\r\n"
+    "; for it; on a US one it only knows English and Language is applied by the port.\r\n"
+    "; PAL still runs at 60 Hz (the console's PAL60 setting).\r\n"
+    "Console = US\r\n"
     "\r\n"
     "[Troubleshooting]\r\n"
     "; 1 = write spyro.log beside the game, for bug reports. It costs a little speed.\r\n"
@@ -216,8 +232,16 @@ static void apply(const char *k, const char *v)
         g_settings.keyboard_mouse = n != 0;
     else if (!_stricmp(k, "SkipIntros"))
         g_settings.skip_intros = n != 0;
+    else if (!_stricmp(k, "Console"))
+        g_settings.pal = !_stricmp(v, "PAL");
     else if (!_stricmp(k, "Log"))
         g_settings.log = n != 0;
+    else if (!_stricmp(k, "ButtonPrompts")) {
+        int i;
+        for (i = 0; i < PROMPTS_COUNT; i++)
+            if (!_stricmp(v, PROMPTS_NAMES[i]))
+                g_settings.button_prompts = i;
+    }
     else if (!_stricmp(k, "Language")) {
         int i;
         for (i = 0; i < LANGUAGE_COUNT; i++)
